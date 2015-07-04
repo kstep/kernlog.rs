@@ -1,7 +1,11 @@
 [package]
 name = "kernlog"
 version = "0.1.0"
+description = "Kernel logger implementation (for low level logging to `/dev/kmsg`)."
 authors = ["Konstantin Stepanov <me@kstep.me>"]
+readme = "README.md"
+repository = "https://github.com/kstep/kernlog.rs.git"
+license = "MIT"
 
 [dependencies]
 log = "*"
