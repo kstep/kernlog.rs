@@ -45,7 +45,7 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-0' class='srclink' href='../src/kernlog/lib.rs.html#1-122' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-0' class='srclink' href='../src/kernlog/lib.rs.html#1-135' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'><p>Logger implementation for low level kernel log (using <code>/dev/kmsg</code>)</p>
 
 <p>Usually intended for low level implementations, like <a href="http://www.freedesktop.org/wiki/Software/systemd/Generators/">systemd generators</a>,
@@ -56,8 +56,14 @@ which have to use <code>/dev/kmsg</code>:</p>
 </blockquote>
 
 <h1 id="examples" class='section-header'><a
-                           href="#examples">Examples</a></h1><pre class='rust rust-example-rendered'>
+                           href="#examples">Examples</a></h1>
+<pre><code class="language-toml">[dependencies]
+log = &quot;*&quot;
+kernlog = &quot;*&quot;
+</code></pre>
+<pre class='rust rust-example-rendered'>
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>log</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>kernlog</span>;
  
 <span class='kw'>fn</span> <span class='ident'>main</span>() {
@@ -71,7 +77,12 @@ which normal users (not root) usually don&#39;t.</p>
 
 <p>If compiled with nightly it can use libc feature to get process id
 and report it into log. This feature is unavailable for stable release
-for now. To enable nightly features, compile with <code>--features nightly</code>.</p>
+for now. To enable nightly features, compile with <code>--features nightly</code>:</p>
+
+<pre><code class="language-toml">[dependencies.kernlog]
+version = &quot;*&quot;
+features = [&quot;nightly&quot;]
+</code></pre>
 </div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
                     <tr class=' module-item'>
