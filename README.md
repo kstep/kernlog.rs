@@ -7,7 +7,10 @@ which have to use `/dev/kmsg`:
 
 > Since syslog is not available (see above) write log messages to /dev/kmsg instead.
 
+[Full documentation.][2]
+
 [1]: http://www.freedesktop.org/wiki/Software/systemd/Generators/
+[2]: http://kstep.me/kernlog.rs/kernlog/index.html
 
 ## Usage
 
