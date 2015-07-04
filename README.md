@@ -17,10 +17,11 @@ kernlog = "*"
 ```
 
 ```rust
+#[macro_use]
 extern crate kernlog;
 
 fn main() {
-    kernlog::init();
+    kernlog::init().unwrap();
     warn!("something strange happened");
 }
 ```
