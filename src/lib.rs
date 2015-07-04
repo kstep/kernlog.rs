@@ -10,30 +10,34 @@
 //! # Examples
 //! 
 //! ```rust
-//! extern crate log;
+//! #[macro_use]
 //! extern crate kernlog;
 //! 
 //! fn main() {
-//!     log::set_logger(kernlog::KernelLog::init);
+//!     kernlog::init().unwrap();
 //!     warn!("something strange happened");
 //! }
 //! ```
 //! Note you have to have permissions to write to `/dev/kmsg`,
 //! which normal users (not root) usually don't.
+//! 
+//! If compiled with nightly it can use libc feature to get process id
+//! and report it into log. This feature is unavailable for stable release
+//! for now. To enable nightly features, compile with `--features nightly`.
 
 #![deny(missing_docs)]
-#![feature(libc)]
-#[macro_use]
+#![cfg_attr(feature="nightly", feature(libc))]
 
+#[macro_use]
 extern crate log;
+#[cfg(feature="nightly")]
 extern crate libc;
 
 use std::fs::{OpenOptions, File};
 use std::io::Write;
 use std::sync::Mutex;
-use libc::funcs::posix88::unistd;
 
-use log::{Log, LogMetadata, LogRecord, LogLevel, MaxLogLevelFilter, LogLevelFilter};
+use log::{Log, LogMetadata, LogRecord, LogLevel, MaxLogLevelFilter, LogLevelFilter, SetLoggerError};
 
 /// Kernel logger implementation
 pub struct KernelLog {
@@ -60,6 +64,7 @@ impl Log for KernelLog {
         true
     }
 
+    #[cfg(feature="nightly")]
     fn log(&self, record: &LogRecord) {
         let level: u8 = match record.level() {
             LogLevel::Error => 3,
@@ -68,10 +73,30 @@ impl Log for KernelLog {
             LogLevel::Debug => 6,
             LogLevel::Trace => 7,
         };
-        let pid = unsafe { unistd::getpid() };
 
         let mut buf = Vec::new();
-        writeln!(buf, "<{}>{}[{}]: {}", level, record.target(), pid, record.args()).unwrap();
+        writeln!(buf, "<{}>{}[{}]: {}", level, record.target(),
+                 unsafe { ::libc::funcs::posix88::unistd::getpid() },
+                 record.args()).unwrap();
+
+        if let Ok(mut kmsg) = self.kmsg.lock() {
+            let _ = kmsg.write(&buf);
+            let _ = kmsg.flush();
+        }
+    }
+
+    #[cfg(not(feature="nightly"))]
+    fn log(&self, record: &LogRecord) {
+        let level: u8 = match record.level() {
+            LogLevel::Error => 3,
+            LogLevel::Warn => 4,
+            LogLevel::Info => 5,
+            LogLevel::Debug => 6,
+            LogLevel::Trace => 7,
+        };
+
+        let mut buf = Vec::new();
+        writeln!(buf, "<{}>{}: {}", level, record.target(), record.args()).unwrap();
 
         if let Ok(mut kmsg) = self.kmsg.lock() {
             let _ = kmsg.write(&buf);
@@ -80,14 +105,18 @@ impl Log for KernelLog {
     }
 }
 
+/// Setup kernel logger as a default logger
+pub fn init() -> Result<(), SetLoggerError> {
+    log::set_logger(KernelLog::init)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::KernelLog;
-    use log;
+    use super::{KernelLog, init};
 
     #[test]
     fn log_to_kernel() {
-        log::set_logger(KernelLog::init);
+        init().unwrap();
         debug!("hello, world!");
     }
 }
