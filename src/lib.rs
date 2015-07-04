@@ -8,9 +8,16 @@
 //! [1]: http://www.freedesktop.org/wiki/Software/systemd/Generators/
 //!
 //! # Examples
+//!
+//! ```toml
+//! [dependencies]
+//! log = "*"
+//! kernlog = "*"
+//! ```
 //! 
 //! ```rust
 //! #[macro_use]
+//! extern crate log;
 //! extern crate kernlog;
 //! 
 //! fn main() {
@@ -23,7 +30,13 @@
 //! 
 //! If compiled with nightly it can use libc feature to get process id
 //! and report it into log. This feature is unavailable for stable release
-//! for now. To enable nightly features, compile with `--features nightly`.
+//! for now. To enable nightly features, compile with `--features nightly`:
+//!
+//! ```toml
+//! [dependencies.kernlog]
+//! version = "*"
+//! features = ["nightly"]
+//! ```
 
 #![deny(missing_docs)]
 #![cfg_attr(feature="nightly", feature(libc))]

@@ -16,11 +16,13 @@ which have to use `/dev/kmsg`:
 
 ```toml
 [dependencies]
+log = "*"
 kernlog = "*"
 ```
 
 ```rust
 #[macro_use]
+extern crate log;
 extern crate kernlog;
 
 fn main() {
