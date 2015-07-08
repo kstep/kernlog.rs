@@ -49,36 +49,66 @@ extern crate libc;
 use std::fs::{OpenOptions, File};
 use std::io::Write;
 use std::sync::Mutex;
+use std::env;
 
 use log::{Log, LogMetadata, LogRecord, LogLevel, MaxLogLevelFilter, LogLevelFilter, SetLoggerError};
 
 /// Kernel logger implementation
 pub struct KernelLog {
-    kmsg: Mutex<File>
+    kmsg: Mutex<File>,
+    maxlevel: LogLevelFilter
 }
 
 impl KernelLog {
     /// Create new kernel logger
     pub fn new() -> KernelLog {
+        KernelLog::with_level(LogLevelFilter::Trace)
+    }
+
+    /// Create new kernel logger with error level filter
+    pub fn with_level(filter: LogLevelFilter) -> KernelLog {
         KernelLog {
-            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg").unwrap())
+            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg").unwrap()),
+            maxlevel: filter
         }
     }
 
     /// Setup new kernel logger for log framework
     pub fn init(filter: MaxLogLevelFilter) -> Box<Log> {
-        filter.set(LogLevelFilter::Trace);
-        Box::new(KernelLog::new())
+        let logger = KernelLog::new();
+        filter.set(logger.maxlevel);
+        Box::new(logger)
+    }
+
+    /// Setup new kernel logger with error level from `KERNLOG_LEVEL` environment variable
+    pub fn init_env(filter: MaxLogLevelFilter) -> Box<Log> {
+        match env::var("KERNLOG_LEVEL") {
+            Err(_) => KernelLog::init(filter),
+            Ok(s) => match s.parse() {
+                Ok(level) => KernelLog::init_level(level, filter),
+                Err(_) => KernelLog::init(filter)
+            }
+        }
+    }
+
+    /// Setup new kernel logger with error level filter
+    pub fn init_level(level: LogLevelFilter, filter: MaxLogLevelFilter) -> Box<Log> {
+        filter.set(level);
+        Box::new(KernelLog::with_level(level))
     }
 }
 
 impl Log for KernelLog {
-    fn enabled(&self, _meta: &LogMetadata) -> bool {
-        true
+    fn enabled(&self, meta: &LogMetadata) -> bool {
+        meta.level() <= self.maxlevel
     }
 
     #[cfg(feature="nightly")]
     fn log(&self, record: &LogRecord) {
+        if record.level() > self.maxlevel {
+            return;
+        }
+
         let level: u8 = match record.level() {
             LogLevel::Error => 3,
             LogLevel::Warn => 4,
