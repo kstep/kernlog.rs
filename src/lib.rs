@@ -130,6 +130,10 @@ impl Log for KernelLog {
 
     #[cfg(not(feature="nightly"))]
     fn log(&self, record: &LogRecord) {
+        if record.level() > self.maxlevel {
+            return;
+        }
+
         let level: u8 = match record.level() {
             LogLevel::Error => 3,
             LogLevel::Warn => 4,
