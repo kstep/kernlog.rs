@@ -10,7 +10,8 @@ license = "MIT"
 keywords = ["kmsg", "log", "logger", "kernel", "dmesg"]
 
 [dependencies]
-log = "*"
+libc = "0.2"
 
-[features]
-nightly = []
+[dependencies.log]
+version = "0.4"
+features = ["std"]
