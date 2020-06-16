@@ -35,7 +35,7 @@ extern crate log;
 extern crate libc;
 
 use std::fs::{OpenOptions, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::sync::Mutex;
 use std::env;
 
@@ -49,12 +49,12 @@ pub struct KernelLog {
 
 impl KernelLog {
     /// Create new kernel logger
-    pub fn new() -> KernelLog {
+    pub fn new() -> io::Result<KernelLog> {
         KernelLog::with_level(log::LevelFilter::Trace)
     }
 
     /// Create new kernel logger with error level from `KERNLOG_LEVEL` environment variable
-    pub fn from_env() -> KernelLog {
+    pub fn from_env() -> io::Result<KernelLog> {
         match env::var("KERNLOG_LEVEL").map_err(|_| ()).and_then(|l| l.parse().map_err(|_| ())) {
             Ok(level) => KernelLog::with_level(level),
             Err(_) => KernelLog::new()
@@ -62,11 +62,11 @@ impl KernelLog {
     }
 
     /// Create new kernel logger with error level filter
-    pub fn with_level(level: log::LevelFilter) -> KernelLog {
-        KernelLog {
-            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg").unwrap()),
+    pub fn with_level(level: log::LevelFilter) -> io::Result<KernelLog> {
+        Ok(KernelLog {
+            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg")?),
             maxlevel: level
-        }
+        })
     }
 }
 
@@ -103,23 +103,24 @@ impl Log for KernelLog {
 }
 
 /// Setup kernel logger as the default logger
-pub fn init() -> Result<(), log::SetLoggerError> {
+pub fn init() -> Result<(), Result<io::Error, log::SetLoggerError>> {
     init_impl(KernelLog::new())
 }
 
 /// Setup kernel logger with error level from `KERNLOG_LEVEL` environment variable as the default logger
-pub fn init_from_env() -> Result<(), log::SetLoggerError> {
+pub fn init_from_env() -> Result<(), Result<io::Error, log::SetLoggerError>> {
     init_impl(KernelLog::from_env())
 }
 
 /// Setup kernel logger with specified error level as the default logger
-pub fn init_with_level(level: log::LevelFilter) -> Result<(), log::SetLoggerError> {
+pub fn init_with_level(level: log::LevelFilter) -> Result<(), Result<io::Error, log::SetLoggerError>> {
     init_impl(KernelLog::with_level(level))
 }
 
-fn init_impl(klog: KernelLog) -> Result<(), log::SetLoggerError> {
+fn init_impl(klog: io::Result<KernelLog>) -> Result<(), Result<io::Error, log::SetLoggerError>> {
+    let klog = klog.map_err(Ok)?;
     let level = klog.maxlevel;
-    log::set_boxed_logger(Box::new(klog))?;
+    log::set_boxed_logger(Box::new(klog)).map_err(Err)?;
     log::set_max_level(level);
     Ok(())
 }
