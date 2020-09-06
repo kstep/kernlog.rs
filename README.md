@@ -16,8 +16,8 @@ which have to use `/dev/kmsg`:
 
 ```toml
 [dependencies]
-log = "*"
-kernlog = "*"
+log = "0.4"
+kernlog = "0.3"
 ```
 
 ```rust

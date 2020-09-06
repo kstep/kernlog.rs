@@ -11,8 +11,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! log = "*"
-//! kernlog = "*"
+//! log = "0.4"
+//! kernlog = "0.3"
 //! ```
 //! 
 //! ```rust
@@ -43,83 +43,68 @@
 
 #[macro_use]
 extern crate log;
-#[cfg(feature="nightly")]
 extern crate libc;
 
 use std::fs::{OpenOptions, File};
-use std::io::Write;
+use std::io::{Write, self};
 use std::sync::Mutex;
 use std::env;
 
-use log::{Log, LogMetadata, LogRecord, LogLevel, MaxLogLevelFilter, LogLevelFilter, SetLoggerError};
+use log::{Log, Metadata, Record, Level, LevelFilter, SetLoggerError};
 
 /// Kernel logger implementation
 pub struct KernelLog {
     kmsg: Mutex<File>,
-    maxlevel: LogLevelFilter
+    maxlevel: LevelFilter
 }
 
 impl KernelLog {
     /// Create new kernel logger
-    pub fn new() -> KernelLog {
-        KernelLog::with_level(LogLevelFilter::Trace)
+    pub fn new() -> io::Result<KernelLog> {
+        KernelLog::with_level(LevelFilter::Trace)
     }
 
-    /// Create new kernel logger with error level filter
-    pub fn with_level(filter: LogLevelFilter) -> KernelLog {
-        KernelLog {
-            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg").unwrap()),
-            maxlevel: filter
-        }
-    }
-
-    /// Setup new kernel logger for log framework
-    pub fn init(filter: MaxLogLevelFilter) -> Box<Log> {
-        let logger = KernelLog::new();
-        filter.set(logger.maxlevel);
-        Box::new(logger)
-    }
-
-    /// Setup new kernel logger with error level from `KERNLOG_LEVEL` environment variable
-    pub fn init_env(filter: MaxLogLevelFilter) -> Box<Log> {
+    /// Create new kernel logger from `KERNLOG_LEVEL` environment variable
+    pub fn from_env() -> io::Result<KernelLog> {
         match env::var("KERNLOG_LEVEL") {
-            Err(_) => KernelLog::init(filter),
+            Err(_) => KernelLog::new(),
             Ok(s) => match s.parse() {
-                Ok(level) => KernelLog::init_level(level, filter),
-                Err(_) => KernelLog::init(filter)
+                Ok(filter) => KernelLog::with_level(filter),
+                Err(_) => KernelLog::new(),
             }
         }
     }
 
-    /// Setup new kernel logger with error level filter
-    pub fn init_level(level: LogLevelFilter, filter: MaxLogLevelFilter) -> Box<Log> {
-        filter.set(level);
-        Box::new(KernelLog::with_level(level))
+    /// Create new kernel logger with error level filter
+    pub fn with_level(filter: LevelFilter) -> io::Result<KernelLog> {
+        Ok(KernelLog {
+            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg")?),
+            maxlevel: filter
+        })
     }
 }
 
 impl Log for KernelLog {
-    fn enabled(&self, meta: &LogMetadata) -> bool {
+    fn enabled(&self, meta: &Metadata) -> bool {
         meta.level() <= self.maxlevel
     }
 
-    #[cfg(feature="nightly")]
-    fn log(&self, record: &LogRecord) {
+    fn log(&self, record: &Record) {
         if record.level() > self.maxlevel {
             return;
         }
 
         let level: u8 = match record.level() {
-            LogLevel::Error => 3,
-            LogLevel::Warn => 4,
-            LogLevel::Info => 5,
-            LogLevel::Debug => 6,
-            LogLevel::Trace => 7,
+            Level::Error => 3,
+            Level::Warn => 4,
+            Level::Info => 5,
+            Level::Debug => 6,
+            Level::Trace => 7,
         };
 
         let mut buf = Vec::new();
         writeln!(buf, "<{}>{}[{}]: {}", level, record.target(),
-                 unsafe { ::libc::funcs::posix88::unistd::getpid() },
+                 unsafe { ::libc::getpid() },
                  record.args()).unwrap();
 
         if let Ok(mut kmsg) = self.kmsg.lock() {
@@ -128,33 +113,54 @@ impl Log for KernelLog {
         }
     }
 
-    #[cfg(not(feature="nightly"))]
-    fn log(&self, record: &LogRecord) {
-        if record.level() > self.maxlevel {
-            return;
-        }
+    fn flush(&self) {}
+}
 
-        let level: u8 = match record.level() {
-            LogLevel::Error => 3,
-            LogLevel::Warn => 4,
-            LogLevel::Info => 5,
-            LogLevel::Debug => 6,
-            LogLevel::Trace => 7,
-        };
+/// KernelLog initialization error
+#[derive(Debug)]
+pub enum KernelLogInitError {
+    /// IO error
+    Io(io::Error),
+    /// Set logger error
+    Log(SetLoggerError)
+}
 
-        let mut buf = Vec::new();
-        writeln!(buf, "<{}>{}: {}", level, record.target(), record.args()).unwrap();
-
-        if let Ok(mut kmsg) = self.kmsg.lock() {
-            let _ = kmsg.write(&buf);
-            let _ = kmsg.flush();
+impl std::fmt::Display for KernelLogInitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            KernelLogInitError::Io(err) => err.fmt(f),
+            KernelLogInitError::Log(err) => err.fmt(f),
         }
     }
 }
 
+impl std::error::Error for KernelLogInitError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            KernelLogInitError::Io(err) => Some(err),
+            KernelLogInitError::Log(err) => Some(err),
+        }
+    }
+}
+
+impl From<SetLoggerError> for KernelLogInitError {
+    fn from(err: SetLoggerError) -> Self {
+        KernelLogInitError::Log(err)
+    }
+}
+impl From<io::Error> for KernelLogInitError {
+    fn from(err: io::Error) -> Self {
+        KernelLogInitError::Io(err)
+    }
+}
+
 /// Setup kernel logger as a default logger
-pub fn init() -> Result<(), SetLoggerError> {
-    log::set_logger(KernelLog::init)
+pub fn init() -> Result<(), KernelLogInitError> {
+    let klog = KernelLog::from_env()?;
+    let maxlevel = klog.maxlevel;
+    log::set_boxed_logger(Box::new(klog))?;
+    log::set_max_level(maxlevel);
+    Ok(())
 }
 
 #[cfg(test)]
