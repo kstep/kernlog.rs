@@ -1,6 +1,6 @@
 [package]
 name = "kernlog"
-version = "0.3.0"
+version = "0.3.1"
 description = "Kernel logger implementation (for low level logging to `/dev/kmsg`)."
 authors = ["Konstantin Stepanov <me@kstep.me>"]
 readme = "README.md"

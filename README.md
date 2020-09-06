@@ -33,13 +33,3 @@ fn main() {
 
 Note you have to have permissions to write to `/dev/kmsg`,
 which normal users (not root) usually don't.
-
-If compiled with nightly it can use libc feature to get process id
-and report it into log. This feature is unavailable for stable release
-for now. To enable nightly features, compile with `--features nightly`:
-
-```toml
-[dependencies.kernlog]
-version = "*"
-features = ["nightly"]
-```
