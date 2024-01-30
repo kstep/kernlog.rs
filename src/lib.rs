@@ -47,6 +47,7 @@ extern crate libc;
 
 use std::fs::{OpenOptions, File};
 use std::io::{Write, self};
+use std::path::Path;
 use std::sync::Mutex;
 use std::env;
 
@@ -59,28 +60,46 @@ pub struct KernelLog {
 }
 
 impl KernelLog {
+
+    const DEFAULT_DEVICE: &'static str = "/dev/kmsg";
+
     /// Create new kernel logger
     pub fn new() -> io::Result<KernelLog> {
         KernelLog::with_level(LevelFilter::Trace)
     }
 
-    /// Create new kernel logger from `KERNLOG_LEVEL` environment variable
+    /// Create new kernel logger from default device with log level specificed by `KERNLOG_LEVEL` environment variable
     pub fn from_env() -> io::Result<KernelLog> {
-        match env::var("KERNLOG_LEVEL") {
-            Err(_) => KernelLog::new(),
-            Ok(s) => match s.parse() {
-                Ok(filter) => KernelLog::with_level(filter),
-                Err(_) => KernelLog::new(),
-            }
-        }
+        Self::from_env_with_device(Self::DEFAULT_DEVICE)
     }
 
-    /// Create new kernel logger with error level filter
+    /// Create new kernel logger from default device with error level filter
     pub fn with_level(filter: LevelFilter) -> io::Result<KernelLog> {
+        Self::with_device_and_level(Self::DEFAULT_DEVICE, filter)
+    }
+
+    /// Create new kernel logger from specific device
+    pub fn with_device(device: impl AsRef<Path>) -> io::Result<KernelLog> {
+        Self::with_device_and_level(device, LevelFilter::Trace)
+    }
+
+    /// Create new kernel logger from specific device with error level filter
+    pub fn with_device_and_level(device: impl AsRef<Path>, filter: LevelFilter) -> io::Result<KernelLog> {
         Ok(KernelLog {
-            kmsg: Mutex::new(OpenOptions::new().write(true).open("/dev/kmsg")?),
+            kmsg: Mutex::new(OpenOptions::new().write(true).open(device.as_ref())?),
             maxlevel: filter
         })
+    }
+
+    /// Create new kernel logger from specific device with error level filter from `KERNLOG_LEVEL` environment variable
+    pub fn from_env_with_device(device: impl AsRef<Path>) -> io::Result<KernelLog> {
+        match env::var("KERNLOG_LEVEL") {
+            Err(_) => KernelLog::with_device(device),
+            Ok(s) => match s.parse() {
+                Ok(filter) => KernelLog::with_device_and_level(device, filter),
+                Err(_) => KernelLog::with_device(device),
+            }
+        }
     }
 }
 
@@ -156,7 +175,12 @@ impl From<io::Error> for KernelLogInitError {
 
 /// Setup kernel logger as a default logger
 pub fn init() -> Result<(), KernelLogInitError> {
-    let klog = KernelLog::from_env()?;
+    init_with_device(KernelLog::DEFAULT_DEVICE)
+}
+
+/// Setup kernel logger as a default logger with specific device
+pub fn init_with_device(device: impl AsRef<Path>) -> Result<(), KernelLogInitError> {
+    let klog = KernelLog::from_env_with_device(device)?;
     let maxlevel = klog.maxlevel;
     log::set_boxed_logger(Box::new(klog))?;
     log::set_max_level(maxlevel);
